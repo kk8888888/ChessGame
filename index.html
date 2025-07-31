@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛博黑白棋 | Cyber Reversi</title>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --matrix-green: #0f0;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-blue);
+        }
+
+        .cyber-container {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2rem;
+            border-radius: 16px;
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 30px var(--neon-blue);
+            margin-top: 2rem;
+            position: relative;
+        }
+
+        /* 棋盘样式 */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            gap: 3px;
+            background: rgba(0, 243, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            position: relative;
+            margin: 20px 0;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .cell.valid::after {
+            content: '';
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: var(--neon-pink);
+            border-radius: 50%;
+            filter: drop-shadow(0 0 10px var(--neon-pink));
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+
+        .disk {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            position: absolute;
+            transition: transform 0.4s, box-shadow 0.3s;
+        }
+
+        .black {
+            background: #000;
+            box-shadow: 0 0 20px var(--neon-blue);
+            border: 2px solid var(--neon-blue);
+        }
+
+        .white {
+            background: #fff;
+            box-shadow: 0 0 20px var(--neon-pink);
+            border: 2px solid var(--neon-pink);
+        }
+
+        /* 技能面板 */
+        .skill-panel {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .skill-btn {
+            background: linear-gradient(45deg, #ff00ff, #00ffff);
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            transition: 0.3s;
+            font-family: 'Orbitron';
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skill-btn::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 25%,
+                rgba(255,255,255,0.2) 50%,
+                transparent 75%
+            );
+            animation: shine 3s infinite linear;
+        }
+
+        @keyframes shine {
+            100% { transform: translate(50%, 50%); }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="cyber-container">
+        <div class="skill-panel">
+            <button class="skill-btn" onclick="useSkill('timeFreeze')">⏳时间冻结</button>
+            <button class="skill-btn" onclick="useSkill('quantumSwap')">🌀量子交换</button>
+            <button class="skill-btn" onclick="useSkill('blackHole')">🕳️黑洞吞噬</button>
+        </div>
+        <div id="board"></div>
+    </div>
+
+<script>
+const BOARD_SIZE = 8;
+let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+let currentPlayer = 'black';
+let skillPoints = 3;
+
+// 初始化游戏
+function init() {
+    board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+    board[3][3] = board[4][4] = 'white';
+    board[3][4] = board[4][3] = 'black';
+    currentPlayer = 'black';
+    render();
+}
+
+// 渲染棋盘（确保可见）
+function render() {
+    const boardElement = document.getElementById('board');
+    boardElement.innerHTML = '';
+    
+    for(let i = 0; i < BOARD_SIZE; i++) {
+        for(let j = 0; j < BOARD_SIZE; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            
+            if (board[i][j]) {
+                const disk = document.createElement('div');
+                disk.className = `disk ${board[i][j]}`;
+                cell.appendChild(disk);
+            }
+            
+            if (isValidMove(i, j)) {
+                cell.classList.add('valid');
+            }
+            
+            cell.addEventListener('click', () => handleMove(i, j));
+            boardElement.appendChild(cell);
+        }
+    }
+}
+
+// 移动验证
+function isValidMove(x, y) {
+    if(board[x][y]) return false;
+    const directions = [
+        [-1,0],[1,0],[0,-1],[0,1],
+        [-1,-1],[-1,1],[1,-1],[1,1]
+    ];
+    return directions.some(([dx, dy]) => checkDirection(x, y, dx, dy));
+}
+
+function checkDirection(x, y, dx, dy) {
+    let nx = x + dx, ny = y + dy;
+    let foundOpponent = false;
+    while(nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+        if(board[nx][ny] === getOpponent()) {
+            foundOpponent = true;
+        } else {
+            return board[nx][ny] === currentPlayer && foundOpponent;
+        }
+        nx += dx;
+        ny += dy;
+    }
+    return false;
+}
+
+// 处理移动
+function handleMove(x, y) {
+    if(!isValidMove(x, y)) return;
+    
+    const flipped = [];
+    const directions = [
+        [-1,0],[1,0],[0,-1],[0,1],
+        [-1,-1],[-1,1],[1,-1],[1,1]
+    ];
+    
+    directions.forEach(([dx, dy]) => {
+        let nx = x + dx, ny = y + dy;
+        const temp = [];
+        while(nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+            if(board[nx][ny] === getOpponent()) {
+                temp.push([nx, ny]);
+            } else if(board[nx][ny] === currentPlayer) {
+                flipped.push(...temp);
+                break;
+            } else break;
+            nx += dx;
+            ny += dy;
+        }
+    });
+    
+    board[x][y] = currentPlayer;
+    flipped.forEach(([i, j]) => board[i][j] = currentPlayer);
+    currentPlayer = getOpponent();
+    render();
+    
+    if(currentPlayer === 'white') setTimeout(aiMove, 500);
+}
+
+// 技能系统
+function useSkill(skillType) {
+    if(skillPoints <= 0) return;
+    
+    switch(skillType) {
+        case 'timeFreeze':
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.style.animation = 'timeFreeze 3s linear infinite';
+            });
+            setTimeout(() => {
+                document.querySelectorAll('.cell').forEach(cell => {
+                    cell.style.animation = '';
+                });
+            }, 5000);
+            break;
+            
+        case 'quantumSwap':
+            board = board.map(row => 
+                row.map(cell => cell === 'black' ? 'white' : cell === 'white' ? 'black' : null)
+            );
+            break;
+            
+        case 'blackHole':
+            const x = Math.floor(Math.random()*(BOARD_SIZE-2))+1;
+            const y = Math.floor(Math.random()*(BOARD_SIZE-2))+1;
+            for(let i=-1; i<=1; i++) {
+                for(let j=-1; j<=1; j++) {
+                    if(board[x+i]?.[y+j]) {
+                        board[x+i][y+j] = null;
+                    }
+                }
+            }
+            break;
+    }
+    
+    skillPoints--;
+    render();
+}
+
+// 情感化AI
+class EmotionalAI {
+    constructor() {
+        this.personality = Math.random() > 0.5 ? 'aggressive' : 'defensive';
+    }
+    
+    makeMove() {
+        const moves = this.getValidMoves();
+        if(moves.length === 0) return;
+        
+        const bestMove = this.personality === 'aggressive' 
+            ? this.chooseAggressiveMove(moves)
+            : this.chooseDefensiveMove(moves);
+            
+        setTimeout(() => handleMove(bestMove.x, bestMove.y), 500);
+    }
+    
+    getValidMoves() {
+        const moves = [];
+        board.forEach((row, i) => {
+            row.forEach((cell, j) => {
+                if(isValidMove(i, j)) moves.push({x:i, y:j});
+            });
+        });
+        return moves;
+    }
+    
+    chooseAggressiveMove(moves) {
+        return moves.sort((a,b) => countFlips(b) - countFlips(a))[0];
+    }
+    
+    chooseDefensiveMove(moves) {
+        return moves.sort((a,b) => calculateStability(a) - calculateStability(b))[0];
+    }
+}
+
+function getOpponent() {
+    return currentPlayer === 'black' ? 'white' : 'black';
+}
+
+// 启动游戏
+init();
+</script>
+</body>
+</html>
